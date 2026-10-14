@@ -104,9 +104,30 @@ async function listObjects(store: ObjectStore, bucket: string, params: URLSearch
   return new Response(body, { headers: XML_HEADERS });
 }
 
+function decodeXmlEntities(text: string): string {
+  return text
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+async function deleteObjects(request: Request, store: ObjectStore): Promise<Response> {
+  const body = await request.text();
+  const keys = [...body.matchAll(/<Key>(.*?)<\/Key>/g)].map((match) => decodeXmlEntities(match[1] ?? ""));
+  for (const key of keys) await store.delete(key);
+  const deleted = keys.map((key) => `<Deleted><Key>${escapeXml(key)}</Key></Deleted>`).join("");
+  return new Response(
+    `<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${deleted}</DeleteResult>`,
+    { headers: XML_HEADERS },
+  );
+}
+
 async function bucketRequest(request: Request, store: ObjectStore, bucket: string, params: URLSearchParams): Promise<Response> {
   if (request.method === "HEAD") return new Response(null, { status: 200 });
   if (request.method === "PUT") return new Response(null, { status: 200 });
+  if (request.method === "POST" && params.has("delete")) return deleteObjects(request, store);
   if (request.method !== "GET") return s3Error(405, "MethodNotAllowed", "Unsupported bucket operation");
   if (params.has("location")) {
     return new Response(

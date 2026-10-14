@@ -103,6 +103,26 @@ describe("handleS3", () => {
     expect(store.text("auths/claude-me@example.com.json")).toBe("x");
   });
 
+  it("deletes a batch of keys the way Litestream retention does", async () => {
+    const store = new MemoryStore();
+    for (const name of ["keeper/litestream/generations/a.ltx", "keeper/litestream/generations/b.ltx", "keeper/litestream/kept.ltx"]) {
+      await store.put(name, new TextEncoder().encode(name).slice().buffer);
+    }
+    const body =
+      `<?xml version="1.0" encoding="UTF-8"?><Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">` +
+      `<Object><Key>keeper/litestream/generations/a.ltx</Key></Object>` +
+      `<Object><Key>keeper/litestream/generations/b.ltx</Key></Object>` +
+      `<Object><Key>keeper/litestream/generations/missing.ltx</Key></Object></Delete>`;
+    const deleted = await handleS3(s3("/state/?delete", { method: "POST", body }), store, BUCKET);
+    expect(deleted.status).toBe(200);
+    const text = await deleted.text();
+    expect(text).toContain("<Key>keeper/litestream/generations/a.ltx</Key>");
+    expect(text).toContain("<Key>keeper/litestream/generations/missing.ltx</Key>");
+    expect(await store.get("keeper/litestream/generations/a.ltx")).toBeNull();
+    expect(await store.get("keeper/litestream/generations/b.ltx")).toBeNull();
+    expect(store.text("keeper/litestream/kept.ltx")).toBe("keeper/litestream/kept.ltx");
+  });
+
   it("only serves its own bucket", async () => {
     const store = new MemoryStore();
     const response = await handleS3(s3("/other/key"), store, BUCKET);
