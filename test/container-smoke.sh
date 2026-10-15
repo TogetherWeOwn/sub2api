@@ -132,9 +132,9 @@ echo "ok CPA takes a pasted callback by its state alone"
 
 keeper_login() {
   rm -f "$JAR"
-  expect 200 -X POST -H "content-type: application/json" -d "{\"password\":\"$KEEPER_PASSWORD\"}" \
+  expect 204 -X POST -H "content-type: application/json" -H "X-CPA-Usage-Keeper-Request: fetch" -d "{\"password\":\"$KEEPER_PASSWORD\"}" \
     -c "$JAR" "$kbase/api/v1/auth/login"
-  expect 401 -X POST -H "content-type: application/json" -d '{"password":"wrong-password"}' \
+  expect 401 -X POST -H "content-type: application/json" -H "X-CPA-Usage-Keeper-Request: fetch" -d '{"password":"wrong-password"}' \
     "$kbase/api/v1/auth/login"
   echo "ok Keeper login accepts the password and refuses a wrong one"
 }
